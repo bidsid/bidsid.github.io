@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Travel Route System with Sublocation Hierarchy</title>
+    
+    <!-- Leaflet Mapping Stylesheet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        :root {
+            --bg-primary: #121214;
+            --bg-sidebar: #1a1a22;
+            --bg-card: #252530;
+            --accent: #6366f1;
+            --accent-hover: #4f46e5;
+            --accent-sub: #10b981;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --border: #374151;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            display: flex;
+            height: 100vh;
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            overflow: hidden;
+        }
+
+        /* Target Configuration Screen Setup Window */
+        #setup-screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(10, 10, 14, 0.96);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 9999;
+            transition: opacity 0.3s ease;
+        }
+
+        .setup-card {
+            background: var(--bg-sidebar);
+            padding: 2.5rem; border-radius: 12px;
+            width: 90%; max-width: 500px;
+            border: 1px solid var(--border);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+        }
+
+        h2, h3 { margin-bottom: 0.75rem; font-weight: 600; }
+        p { color: var(--text-muted); margin-bottom: 1.25rem; font-size: 0.9rem; line-height: 1.4; }
+
+        input, select, button {
+            width: 100%; padding: 0.65rem 0.85rem;
+            border-radius: 6px; border: 1px solid var(--border);
+            background: var(--bg-primary); color: var(--text-main);
+            font-size: 0.95rem; margin-bottom: 0.75rem; outline: none;
+        }
+        input:focus, select:focus { border-color: var(--accent); }
+        
+        button {
+            background: var(--accent); border: none; font-weight: 600;
+            cursor: pointer; transition: background 0.2s;
+        }
+        button:hover { background: var(--accent-hover); }
+
+        .btn-secondary { background: #4b5563; }
+        .btn-secondary:hover { background: #374151; }
+
+        /* Core Application Window Mechanics Layout */
+        #sidebar {
+            width: 420px; background: var(--bg-sidebar);
+            border-right: 1px solid var(--border);
+            display: flex; flex-direction: column; height: 100%; z-index: 10;
+        }
+
+        .sidebar-block {
+            padding: 1.25rem; border-bottom: 1px solid var(--border);
+        }
+
+        .io-row {
+            display: flex; gap: 0.5rem; margin-top: 0.5rem;
+        }
+        .io-row button, .io-row label { flex: 1; text-align: center; font-size: 0.85rem; margin-bottom: 0; }
+        
+        #file-input { display: none; }
+        .file-label {
+            background: #4b5563; padding: 0.65rem; border-radius: 6px;
+            font-weight: 600; cursor: pointer; display: inline-block;
+        }
+        .file-label:hover { background: #374151; }
+
+        .inline-inputs { display: flex; gap: 0.4rem; }
+
+        /* Interactive Location Tree Scrolling Area */
+        .location-tree {
+            flex: 1; overflow-y: auto; padding: 1.25rem;
+        }
+
+        .main-loc-card {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 8px; margin-bottom: 1rem; overflow: hidden;
+            transition: border-color 0.2s;
+        }
+        .main-loc-card:hover { border-color: var(--accent); }
+
+        .main-loc-header {
+            padding: 0.85rem 1rem; display: flex; align-items: center;
+            justify-content: space-between; cursor: pointer; background: rgba(0,0,0,0.15);
+        }
+
+        .main-loc-info { flex: 1; }
+        .main-loc-title { font-weight: 600; font-size: 0.95rem; }
+        .main-loc-meta { font-size: 0.75rem; color: var(--text-muted); }
+
+        .controls-inline { display: flex; align-items: center; gap: 0.5rem; }
+        .collapse-toggle { font-size: 0.8rem; padding: 0.25rem 0.5rem; cursor: pointer; }
+
+        .sub-loc-container {
+            padding: 0.5rem 1rem 0.85rem 1.5rem;
+            border-top: 1px solid rgba(255,255,255,0.05);
+            background: rgba(0, 0, 0, 0.05);
+        }
+
+        .sub-loc-item {
+            padding: 0.5rem; border-left: 2px solid var(--accent-sub);
+            margin-top: 0.5rem; background: var(--bg-primary);
+            border-radius: 0 4px 4px 0; font-size: 0.85rem;
+            position: relative; display: flex; justify-content: space-between; align-items: center;
+        }
+        
+        .sub-route-toggle-container {
+            display: flex; align-items: center; justify-content: space-between;
+            font-size: 0.75rem; color: var(--text-muted); padding: 0.4rem 0;
+            border-bottom: 1px dashed var(--border); margin-bottom: 0.25rem;
+        }
+        .sub-route-checkbox { width: auto; margin-bottom: 0; cursor: pointer; }
+
+        .del-icon {
+            background: #ef4444; border: none; color: white; width: auto;
+            padding: 0.15rem 0.4rem; font-size: 0.7rem; margin-bottom: 0;
+        }
+        .del-icon:hover { background: #b91c1c; }
+
+        #map-container { flex: 1; height: 100%; position: relative; }
+        #map { width: 100%; height: 100%; }
+
+        /* Spatial Highlight & Isolation Utility States */
+        .map-fade { opacity: 0.12 !important; transition: opacity 0.2s ease; }
+        .map-focus { opacity: 1 !important; weight: 5 !important; stroke: #f59e0b !important; }
+    </style>
+</head>
+<body>
+
+    <!-- Target Setup Window Screen UI Layout -->
+    <div id="setup-screen">
+        <div class="setup-card">
+            <h2>Travel Configuration Engine</h2>
+            <p>Enter targeted exploration countries to frame boundaries, or bypass by importing an existing trip archive configuration sheet.</p>
+            <input type="text" id="target-countries" placeholder="e.g., Germany, Austria" autofocus>
+            <button onclick="initializeWorkspace(null)">Build Fresh Canvas</button>
+            <div style="text-align: center; margin: 0.75rem 0; color: var(--text-muted); font-size: 0.85rem;">— OR —</div>
+            <label for="file-input-init" class="file-label" style="width:100%; text-align:center;">Upload Saved Itinerary JSON</label>
+            <input type="file" id="file-input-init" accept=".json" onchange="importSavedItinerary(event, true)">
+        </div>
+    </div>
+
+    <!-- Interface Workspace Control Bar -->
+    <div id="sidebar">
+        <div class="sidebar-block">
+            <h2 style="font-size:1.15rem;" id="trip-header">Voyage Network Map</h2>
+            <p id="country-tag" style="font-size:0.8rem; margin-bottom:0.75rem;"></p>
+            <div class="io-row">
+                <button onclick="exportItineraryArchive()">Export Config</button>
+                <label for="file-input" class="file-label">Import Config</label>
+                <input type="file" id="file-input" accept=".json" onchange="importSavedItinerary(event, false)">
+            </div>
+        </div>
+
+        <!-- Node Tree Entry Modals Panel -->
+        <div class="sidebar-block" style="background: rgba(0,0,0,0.15);">
+            <h3 style="font-size:0.85rem; color:var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Add Route Location Stop</h3>
+            
+            <select id="target-node-type" onchange="toggleFormContext()">
+                <option value="main">Create New Primary Stop</option>
+                <option value="sub">Create Nested Sub-location</option>
+            </select>
+
+            <!-- Parent Target Assignment Dynamic Selector Node -->
+            <div id="parent-selector-wrapper" style="display:none;">
+                <select id="parent-stop-id"></select>
+            </div>
+
+            <input type="text" id="loc-name" placeholder="Search location or city name...">
+            <div class="inline-inputs">
+                <input type="number" id="loc-lat" step="any" placeholder="Lat (Optional)">
+                <input type="number" id="loc-lng" step="any" placeholder="Lng (Optional)">
+            </div>
+            <button onclick="handleAddNodePipeline()">Commit Route Point</button>
+        </div>
+
+        <!-- Interactive Nested Location Scrolling Area Layout -->
+        <div class="location-tree" id="location-tree-root"></div>
+    </div>
+
+    <!-- Active Visualization Mapping Canvas -->
+    <div id="map-container">
+        <div id="map"></div>
+    </div>
+
+    <!-- Leaflet Engine Logic Infrastructure Layers Scripting -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        let map;
+        let itineraryTree = []; // Operational tree storage holding {id, name, lat, lng, showSub: true, connectSub: true, subLocations: []}
+        let mapLayers = { markers: [], polylines: [], arrows: [] };
+
+        // Toggle generation configurations between Top-level stops vs nested positions
+        function toggleFormContext() {
+            const type = document.getElementById('target-node-type').value;
+            document.getElementById('parent-selector-wrapper').style.display = (type === 'sub') ? 'block' : 'none';
+            refreshParentSelectorDropdown();
+        }
+
+        function refreshParentSelectorDropdown() {
+            const dropdown = document.getElementById('parent-stop-id');
+            dropdown.innerHTML = '';
+            if(itineraryTree.length === 0) {
+                dropdown.innerHTML = '<option value="">(No Primary Stops Exist Yet)</option>';
+                return;
+            }
+            itineraryTree.forEach(stop => {
+                dropdown.innerHTML += `<option value="${stop.id}">Nest inside: ${stop.name}</option>`;
+            });
+        }
+
+        // Bootstrapping engine functions clearing onboarding views
+        async function initializeWorkspace(loadedTreeData) {
+            let countries = document.getElementById('target-countries').value.trim();
+            document.getElementById('setup-screen').style.opacity = '0';
+            setTimeout(() => document.getElementById('setup-screen').style.display = 'none', 300);
+
+            // Construct baseline mapping system
+            map = L.map('map').setView([20, 0], 2);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+            }).addTo(map);
+
+            // Click capture mechanics mapping back data fields
+            map.on('click', (e) => {
+                document.getElementById('loc-lat').value = e.latlng.lat.toFixed(6);
+                document.getElementById('loc-lng').value = e.latlng.lng.toFixed(6);
+                if(!document.getElementById('loc-name').value) {
+                    document.getElementById('loc-name').value = `Picked Point (${e.latlng.lat.toFixed(2)}, ${e.latlng.lng.toFixed(2)})`;
+                }
+            });
+
+            if (loadedTreeData) {
+                itineraryTree = loadedTreeData;
+                document.getElementById('country-tag').innerText = "Restored configurations from local document file structure.";
+                renderItineraryFramework();
+                zoomToFitFullRoute();
+            } else {
+                if(!countries) countries = "Global Workspace Area";
+                document.getElementById('country-tag').innerText = `Primary Target Grid Bounds: ${countries}`;
+                try {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(countries)}`);
+                    const data = await res.json();
+                    if(data && data.length > 0) map.setView([parseFloat(data[0].lat), parseFloat(data[0].lon)], 5);
+                } catch(e) {}
+                renderItineraryFramework();
+            }
+        }
+
+        // Structural operational pipeline managing parsing workflows
+        async function handleAddNodePipeline() {
+            const type = document.getElementById('target-node-type').value;
+            const nameInput = document.getElementById('loc-name');
+            const latInput = document.getElementById('loc-lat');
+            const lngInput = document.getElementById('loc-lng');
+
+            let name = nameInput.value.trim();
+            let lat = parseFloat(latInput.value);
+            let lng = parseFloat(lngInput.value);
+
+            if (!name) return alert("Please clarify a recognizable title identifier node.");
+
+            // Automatic geocoding resolver fallback mechanics
+            if (isNaN(lat) || isNaN(lng)) {
+                try {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(name)}`);
+                    const data = await res.json();
+                    if(data && data.length > 0) {
+                        lat = parseFloat(data[0].lat);
+                        lng = parseFloat(data[0].lon);
+                        name = data[0].display_name.split(',')[0];
+                    } else {
+                        return alert("No coordinate positioning data returned. Click manually inside map canvas space to extract.");
+                    }
+                } catch(e) { return alert("Network tracking exceptions caught managing resolution loops."); }
+            }
+
+            const uniqueNodeId = Date.now().toString();
+
+            if (type === 'main') {
+                itineraryTree.push({
+                    id: uniqueNodeId, name, lat, lng,
+                    showSub: true, connectSub: true, subLocations: []
+                });
+            } else {
+                const parentId = document.getElementById('parent-stop-id').value;
+                const parentStop = itineraryTree.find(s => s.id === parentId);
+                if(!parentStop) return alert("Invalid structural target hierarchy matching configurations operations parsing.");
+                parentStop.subLocations.push({ id: uniqueNodeId, name, lat, lng });
+            }
+
+            nameInput.value = ''; latInput.value = ''; lngInput.value = '';
+            refreshParentSelectorDropdown();
+            renderItineraryFramework();
+            map.setView([lat, lng], Math.max(map.getZoom(), 7));
+        }
+
+        // Deep functional recursive compiler formatting workspace trees and dynamic layers mappings
+        function renderItineraryFramework() {
+            // Standard cleanup flushing maps operational canvas spaces
+            Object.keys(mapLayers).forEach(layerKey => {
+                mapLayers[layerKey].forEach(layer => map.removeLayer(layer));
+                mapLayers[layerKey] = [];
+            });
+
+            const treeContainer = document.getElementById('location-tree-root');
+            treeContainer.innerHTML = '';
+
+            itineraryTree.forEach((mainLoc, mainIdx) => {
+                // Construct Main Element Segment Dom Blocks
+                const mainNodeElement = document.createElement('div');
+                mainNodeElement.className = 'main-loc-card';
+                
+                let subLocsHTML = '';
+                if (mainLoc.showSub && mainLoc.subLocations.length > 0) {
+                    subLocsHTML += `
+                        <div class="sub-loc-container">
+                            <div class="sub-route-toggle-container">
+                                <span>Connect Sub-locations with Route</span>
+                                <input type="checkbox" class="sub-route-checkbox" ${mainLoc.connectSub ? 'checked' : ''} 
+                                    onclick="toggleSubRouteLine('${mainLoc.id}', this.checked)">
+                            </div>
+                    `;
+                    mainLoc.subLocations.forEach((sub) => {
+                        subLocsHTML += `
+                            <div class="sub-loc-item" 
+                                 onmouseenter="isolateMapAsset('${sub.id}', 'sub')" 
+                                 onmouseleave="resetMapAssetIsolations()">
+                                <div>
+                                    <div style="font-weight:600;">${sub.name}</div>
+                                    <div style="font-size:0.7rem; color:var(--text-muted); font-family:monospace;">${sub.lat.toFixed(3)}, ${sub.lng.toFixed(3)}</div>
+                                </div>
+                                <button class="del-icon" onclick="removeSubNode('${mainLoc.id}', '${sub.id}', event)">×</button>
+                            </div>
+                        `;
+                    });
+                    subLocsHTML += `</div>`;
+                }
+
+                mainNodeElement.innerHTML = `
+                    <div class="main-loc-header" 
+                         onclick="focusZoomMainLocation('${mainLoc.id}')"
+                         onmouseenter="isolateMapAsset('${mainLoc.id}', 'main', ${mainIdx})"
+                         onmouseleave="resetMapAssetIsolations()">
+                        <div class="main-loc-info">
+                            <div class="main-loc-title">${mainIdx + 1}. ${mainLoc.name}</div>
+                            <div class="main-loc-meta">${mainLoc.subLocations.length} sub-locations registered</div>
+                        </div>
+                        <div class="controls-inline" onclick="event.stopPropagation();">
+                            <button class="del-icon" onclick="removeMainNode('${mainLoc.id}', event)">Delete</button>
+                            <span class="collapse-toggle" onclick="toggleSubVisibility('${mainLoc.id}')">
+                                ${mainLoc.showSub ? '▼' : '►'}
+                            </span>
+                        </div>
+                    </div>
+                    ${subLocsHTML}
+                `;
+                treeContainer.appendChild(mainNodeElement);
+
+                // Plot Primary Markers
+                const mainMarker = L.circleMarker([mainLoc.lat, mainLoc.lng], {
+                    radius: 9, fillColor: '#6366f1', color: '#fff', weight: 2, fillOpacity: 1
+                }).addTo(map).bindPopup(`<b>${mainLoc.name}</b><br>Primary Route Stop #${mainIdx + 1}`);
+                mainMarker._idRef = mainLoc.id; mainMarker._typeRef = 'main'; mainMarker._indexRef = mainIdx;
+                mapLayers.markers.push(mainMarker);
+
+                // Plot Child Locations Markers
+                mainLoc.subLocations.forEach(sub => {
+                    const subMarker = L.circleMarker([sub.lat, sub.lng], {
+                        radius: 6, fillColor: '#10b981', color: '#fff', weight: 1.5, fillOpacity: 0.9
+                    }).addTo(map).bindPopup(`<b>${sub.name}</b><br>Sublocation of: ${mainLoc.name}`);
+                    subMarker._idRef = sub.id; subMarker._typeRef = 'sub'; subMarker._parentIdRef = mainLoc.id;
+                    mapLayers.markers.push(subMarker);
+                });
+
+                // Structural rendering parameters drawing localized inside nested sub routes vectors
+                if(mainLoc.showSub && mainLoc.connectSub && mainLoc.subLocations.length > 0) {
+                    for(let k = 0; k < mainLoc.subLocations.length - 1; k++) {
+                        const subS = mainLoc.subLocations[k];
+                        const subE = mainLoc.subLocations[k+1];
+                        
+                        const subPoly = L.polyline([[subS.lat, subS.lng], [subE.lat, subE.lng]], {
+                            color: '#10b981', weight: 2, opacity: 0.7, dashArray: '3, 6'
+                        }).addTo(map);
+                        subPoly._parentIdRef = mainLoc.id; subPoly._typeRef = 'subLine';
+                        mapLayers.polylines.push(subPoly);
+                    }
+                }
+            });
+
+            // Draw primary connections routes bridging major nodes paths
+            for (let i = 0; i < itineraryTree.length - 1; i++) {
+                const nodeStart = itineraryTree[i];
+                const nodeEnd = itineraryTree[i + 1];
+
+                const mainLine = L.polyline([[nodeStart.lat, nodeStart.lng], [nodeEnd.lat, nodeEnd.lng]], {
+                    color: '#818cf8', weight: 4, opacity: 0.85
+                }).addTo(map);
+                mainLine._typeRef = 'mainLine'; mainLine._indexRef = i;
+                mapLayers.polylines.push(mainLine);
+
+                // Calculate orientation vectors midpaths arrows alignment geometry tracking points
+                const midLat = (nodeStart.lat + nodeEnd.lat) / 2;
+                const midLng = (nodeStart.lng + nodeEnd.lng) / 2;
+                const angle = Math.atan2(nodeEnd.lng - nodeStart.lng, nodeEnd.lat - nodeStart.lat) * 180 / Math.PI;
+
+                const directionArrow = L.marker([midLat, midLng], {
+                    icon: L.divIcon({
+                        className: 'map-arrow-node',
+                        html: `<div style="transform: rotate(${angle}deg); color: #f59e0b; font-size: 18px; line-height: 1;">➔</div>`,
+                        iconSize: [20, 20], iconAnchor: [10, 10]
+                    })
+                }).addTo(map);
+                directionArrow._indexRef = i; directionArrow._typeRef = 'arrow';
+                mapLayers.arrows.push(directionArrow);
+            }
+        }
+
+        // Navigation state manipulation handling actions zoom controls targeting nodes
+        function focusZoomMainLocation(id) {
+            const target = itineraryTree.find(s => s.id === id);
+            if (!target) return;
+            
+            if(target.subLocations.length > 0) {
+                // Bounds boxing dynamic calculations capturing clusters
+                const points = [[target.lat, target.lng], ...target.subLocations.map(s => [s.lat, s.lng])];
+                map.fitBounds(L.latLngBounds(points), { padding: [50, 50], maxZoom: 13 });
+            } else {
+                map.setView([target.lat, target.lng], 12);
+            }
+        }
+
+        function toggleSubVisibility(id) {
+            const stop = itineraryTree.find(s => s.id === id);
+            if(stop) { stop.showSub = !stop.showSub; renderItineraryFramework(); }
+        }
+
+        function toggleSubRouteLine(id, checkValue) {
+            const stop = itineraryTree.find(s => s.id === id);
+            if(stop) { stop.connectSub = checkValue; renderItineraryFramework(); }
+        }
+
+        function removeMainNode(id, event) {
+            event.stopPropagation();
+            itineraryTree = itineraryTree.filter(s => s.id !== id);
+            refreshParentSelectorDropdown();
+            renderItineraryFramework();
+        }
+
+        function removeSubNode(parentId, subId, event) {
+            event.stopPropagation();
+            const parent = itineraryTree.find(s => s.id === parentId);
+            if(parent) {
+                parent.subLocations = parent.subLocations.filter(sub => sub.id !== subId);
+                renderItineraryFramework();
+            }
+        }
+
+        // Realtime element focus filters applied via sidebar list hover streams
+        function isolateMapAsset(id, type, index = null) {
+            mapLayers.markers.forEach(m => {
+                if (type === 'main' && m._idRef === id) {
+                    m.setStyle({ fillColor: '#f59e0b', radius: 12 });
+                } else if (type === 'sub' && m._idRef === id) {
+                    m.setStyle({ fillColor: '#f59e0b', radius: 9 });
+                } else if (type === 'main' && m._parentIdRef === id) {
+                    // Retain brightness for children of focused parent
+                } else {
+                    m.getElement()?.classList.add('map-fade');
+                }
+            });
+
+            mapLayers.polylines.forEach(p => {
+                if (type === 'main' && (p._indexRef === index || p._indexRef === (index - 1)) && p._typeRef === 'mainLine') {
+                    p.getElement()?.classList.add('map-focus');
+                } else if (type === 'main' && p._parentIdRef === id && p._typeRef === 'subLine') {
+                    // Highlight sub-paths inside selected parent
+                } else {
+                    p.getElement()?.classList.add('map-fade');
+                }
+            });
+
+            mapLayers.arrows.forEach(a => {
+                if (type === 'main' && (a._indexRef === index || a._indexRef === (index - 1))) {
+                    // Retain visibility for matching vectors
+                } else {
+                    a.getElement()?.classList.add('map-fade');
+                }
+            });
+        }
+
+        function resetMapAssetIsolations() {
+            mapLayers.markers.forEach(m => {
+                m.getElement()?.classList.remove('map-fade');
+                m.setStyle({ fillColor: m._typeRef === 'main' ? '#6366f1' : '#10b981', radius: m._typeRef === 'main' ? 9 : 6 });
+            });
+            mapLayers.polylines.forEach(p => {
+                const el = p.getElement();
+                if(el) { el.classList.remove('map-fade'); el.classList.remove('map-focus'); }
+            });
+            mapLayers.arrows.forEach(a => a.getElement()?.classList.remove('map-fade'));
+        }
+
+        function zoomToFitFullRoute() {
+            if(itineraryTree.length === 0) return;
+            const boundsPoints = [];
+            itineraryTree.forEach(s => {
+                boundsPoints.push([s.lat, s.lng]);
+                s.subLocations.forEach(sub => boundsPoints.push([sub.lat, sub.lng]));
+            });
+            map.fitBounds(L.latLngBounds(boundsPoints), { padding: [40, 40] });
+        }
+
+        // I/O Config System Data Pipeline Operations Handling (JSON Import / Export Tools)
+        function exportItineraryArchive() {
+            if(itineraryTree.length === 0) return alert("Nothing to export yet! Map some locations first.");
+            const clusterDataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(itineraryTree, null, 2));
+            const interceptorDlNode = document.createElement('a');
+            interceptorDlNode.setAttribute("href", clusterDataStr);
+            interceptorDlNode.setAttribute("download", `travel_itinerary_archive_${Date.now()}.json`);
+            document.body.appendChild(interceptorDlNode);
+            interceptorDlNode.click();
+            interceptorDlNode.remove();
+        }
+
+        function importSavedItinerary(event, initPhase) {
+            const inputSrc = event.target;
+            if(!inputSrc.files || inputSrc.files.length === 0) return;
+            
+            const reader = new FileReader();
+            reader.onload = function() {
+                try {
+                    const parsedStructure = JSON.parse(reader.result);
+                    if(Array.isArray(parsedStructure)) {
+                        if(initPhase) {
+                            initializeWorkspace(parsedStructure);
+                        } else {
+                            itineraryTree = parsedStructure;
+                            refreshParentSelectorDropdown();
+                            renderItineraryFramework();
+                            zoomToFitFullRoute();
+                        }
+                    } else { alert("Malformed configuration formatting encountered inside the uploaded file structural array validation mappings."); }
+                } catch(err) { alert("Failed to parse the itinerary configuration JSON file securely."); }
+            };
+            reader.readAsText(inputSrc.files[0]);
+        }
+    </script>
+</body>
+</html>
