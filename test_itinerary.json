@@ -1,0 +1,46 @@
+[
+  {
+    "id": "1783911618866",
+    "name": "Tokyo",
+    "lat": 35.6768601,
+    "lng": 139.7638947,
+    "showSub": true,
+    "connectSub": true,
+    "subLocations": [
+      {
+        "id": "1783911735096",
+        "name": "Meiji Jingu Main Shrine",
+        "lat": 35.6748417,
+        "lng": 139.6996266
+      },
+      {
+        "id": "1783911744084",
+        "name": "Shibuya Scramble Crossing",
+        "lat": 35.6594951,
+        "lng": 139.7004982
+      }
+    ]
+  },
+  {
+    "id": "1783911757183",
+    "name": "Osaka",
+    "lat": 34.6937569,
+    "lng": 135.5014539,
+    "showSub": true,
+    "connectSub": true,
+    "subLocations": [
+      {
+        "id": "1783911797258",
+        "name": "Dōtonbori",
+        "lat": 34.6690306,
+        "lng": 135.5015715
+      },
+      {
+        "id": "1783911810115",
+        "name": "Osaka Castle",
+        "lat": 34.6873735,
+        "lng": 135.5258555
+      }
+    ]
+  }
+]
