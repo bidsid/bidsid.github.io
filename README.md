@@ -1,3 +1,6 @@
-# cevenaris.github.io
+# Sid's website
 
-My personal website. It contains an overview of the various projects that I've made, with demos for those that can be compiled to html5. 
+My personal website. Mostly contains web applications that I want quick access to. 
+
+Current projects featured:
+Interactive trip planner (vibe coded)
