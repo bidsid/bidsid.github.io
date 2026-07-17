@@ -1,581 +1,1142 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced Travel Route System with Sublocation Hierarchy</title>
+    <title>Dynamic Hierarchical Travel Route Engine</title>
     
-    <!-- Leaflet Mapping Stylesheet -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f5f3ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
     <style>
-        :root {
-            --bg-primary: #121214;
-            --bg-sidebar: #1a1a22;
-            --bg-card: #252530;
-            --accent: #6366f1;
-            --accent-hover: #4f46e5;
-            --accent-sub: #10b981;
-            --text-main: #f3f4f6;
-            --text-muted: #9ca3af;
-            --border: #374151;
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
         }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        ::-webkit-scrollbar-track {
+            background: transparent;
         }
-
-        body {
-            display: flex;
-            height: 100vh;
-            background-color: var(--bg-primary);
-            color: var(--text-main);
-            overflow: hidden;
+        .dark ::-webkit-scrollbar-track {
+            background: #1f2937;
         }
-
-        /* Target Configuration Screen Setup Window */
-        #setup-screen {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(10, 10, 14, 0.96);
-            display: flex; justify-content: center; align-items: center;
-            z-index: 9999;
-            transition: opacity 0.3s ease;
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
         }
-
-        .setup-card {
-            background: var(--bg-sidebar);
-            padding: 2.5rem; border-radius: 12px;
-            width: 90%; max-width: 500px;
-            border: 1px solid var(--border);
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+        .dark ::-webkit-scrollbar-thumb {
+            background: #4b5563;
         }
-
-        h2, h3 { margin-bottom: 0.75rem; font-weight: 600; }
-        p { color: var(--text-muted); margin-bottom: 1.25rem; font-size: 0.9rem; line-height: 1.4; }
-
-        input, select, button {
-            width: 100%; padding: 0.65rem 0.85rem;
-            border-radius: 6px; border: 1px solid var(--border);
-            background: var(--bg-primary); color: var(--text-main);
-            font-size: 0.95rem; margin-bottom: 0.75rem; outline: none;
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
         }
-        input:focus, select:focus { border-color: var(--accent); }
-        
-        button {
-            background: var(--accent); border: none; font-weight: 600;
-            cursor: pointer; transition: background 0.2s;
+        .dark ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280;
         }
-        button:hover { background: var(--accent-hover); }
-
-        .btn-secondary { background: #4b5563; }
-        .btn-secondary:hover { background: #374151; }
-
-        /* Core Application Window Mechanics Layout */
-        #sidebar {
-            width: 420px; background: var(--bg-sidebar);
-            border-right: 1px solid var(--border);
-            display: flex; flex-direction: column; height: 100%; z-index: 10;
+        .map-fade {
+            opacity: 0.15 !important;
+            transition: opacity 0.25s ease;
         }
-
-        .sidebar-block {
-            padding: 1.25rem; border-bottom: 1px solid var(--border);
+        .map-highlight {
+            opacity: 1 !important;
+            stroke: #fbbf24 !important;
+            weight: 5 !important;
+            transition: all 0.25s ease;
         }
-
-        .io-row {
-            display: flex; gap: 0.5rem; margin-top: 0.5rem;
+        .leaflet-container {
+            background: #f1f5f9 !important;
+            transition: background-color 0.3s ease;
         }
-        .io-row button, .io-row label { flex: 1; text-align: center; font-size: 0.85rem; margin-bottom: 0; }
-        
-        #file-input { display: none; }
-        .file-label {
-            background: #4b5563; padding: 0.65rem; border-radius: 6px;
-            font-weight: 600; cursor: pointer; display: inline-block;
-        }
-        .file-label:hover { background: #374151; }
-
-        .inline-inputs { display: flex; gap: 0.4rem; }
-
-        /* Interactive Location Tree Scrolling Area */
-        .location-tree {
-            flex: 1; overflow-y: auto; padding: 1.25rem;
-        }
-
-        .main-loc-card {
-            background: var(--bg-card); border: 1px solid var(--border);
-            border-radius: 8px; margin-bottom: 1rem; overflow: hidden;
-            transition: border-color 0.2s;
-        }
-        .main-loc-card:hover { border-color: var(--accent); }
-
-        .main-loc-header {
-            padding: 0.85rem 1rem; display: flex; align-items: center;
-            justify-content: space-between; cursor: pointer; background: rgba(0,0,0,0.15);
-        }
-
-        .main-loc-info { flex: 1; }
-        .main-loc-title { font-weight: 600; font-size: 0.95rem; }
-        .main-loc-meta { font-size: 0.75rem; color: var(--text-muted); }
-
-        .controls-inline { display: flex; align-items: center; gap: 0.5rem; }
-        .collapse-toggle { font-size: 0.8rem; padding: 0.25rem 0.5rem; cursor: pointer; }
-
-        .sub-loc-container {
-            padding: 0.5rem 1rem 0.85rem 1.5rem;
-            border-top: 1px solid rgba(255,255,255,0.05);
-            background: rgba(0, 0, 0, 0.05);
-        }
-
-        .sub-loc-item {
-            padding: 0.5rem; border-left: 2px solid var(--accent-sub);
-            margin-top: 0.5rem; background: var(--bg-primary);
-            border-radius: 0 4px 4px 0; font-size: 0.85rem;
-            position: relative; display: flex; justify-content: space-between; align-items: center;
+        .dark .leaflet-container {
+            background: #111827 !important;
         }
         
-        .sub-route-toggle-container {
-            display: flex; align-items: center; justify-content: space-between;
-            font-size: 0.75rem; color: var(--text-muted); padding: 0.4rem 0;
-            border-bottom: 1px dashed var(--border); margin-bottom: 0.25rem;
+        /* Leaflet Dark Theme Overrides */
+        .dark .leaflet-bar {
+            border: 1px solid #374151 !important;
+            background-color: #111827 !important;
         }
-        .sub-route-checkbox { width: auto; margin-bottom: 0; cursor: pointer; }
-
-        .del-icon {
-            background: #ef4444; border: none; color: white; width: auto;
-            padding: 0.15rem 0.4rem; font-size: 0.7rem; margin-bottom: 0;
+        .dark .leaflet-bar a {
+            background-color: #111827 !important;
+            color: #f3f4f6 !important;
+            border-bottom: 1px solid #374151 !important;
         }
-        .del-icon:hover { background: #b91c1c; }
-
-        #map-container { flex: 1; height: 100%; position: relative; }
-        #map { width: 100%; height: 100%; }
-
-        /* Spatial Highlight & Isolation Utility States */
-        .map-fade { opacity: 0.12 !important; transition: opacity 0.2s ease; }
-        .map-focus { opacity: 1 !important; weight: 5 !important; stroke: #f59e0b !important; }
+        .dark .leaflet-bar a:hover {
+            background-color: #1f2937 !important;
+        }
+        
+        /* Smooth transition for theme switches */
+        body, aside, main, input, select, button {
+            transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+        }
     </style>
 </head>
-<body>
+<body class="bg-slate-50 dark:bg-gray-950 text-slate-800 dark:text-gray-100 flex h-screen w-screen overflow-hidden">
 
-    <!-- Target Setup Window Screen UI Layout -->
-    <div id="setup-screen">
-        <div class="setup-card">
-            <h2>Travel Configuration Engine</h2>
-            <p>Enter targeted exploration countries to frame boundaries, or bypass by importing an existing trip archive configuration sheet.</p>
-            <input type="text" id="target-countries" placeholder="e.g., Germany, Austria" autofocus>
-            <button onclick="initializeWorkspace(null)">Build Fresh Canvas</button>
-            <div style="text-align: center; margin: 0.75rem 0; color: var(--text-muted); font-size: 0.85rem;">— OR —</div>
-            <label for="file-input-init" class="file-label" style="width:100%; text-align:center;">Upload Saved Itinerary JSON</label>
-            <input type="file" id="file-input-init" accept=".json" onchange="importSavedItinerary(event, true)">
+    <div id="setup-screen" class="absolute inset-0 bg-slate-900/95 dark:bg-gray-950/95 flex items-center justify-center z-[9999] transition-opacity duration-300">
+        <div class="bg-white dark:bg-gray-900 border border-slate-200 dark:border-gray-800 p-8 rounded-xl max-w-md w-full mx-4 shadow-2xl text-center md:text-left">
+            <h2 class="text-2xl font-bold mb-3 text-slate-800 dark:text-white">Initialize Travel Blueprint</h2>
+            <p class="text-slate-600 dark:text-gray-400 text-sm mb-6 leading-relaxed">
+                Enter your target country or list of countries. This calibrates the baseline map viewport boundaries.
+            </p>
+            <input type="text" id="target-countries" value="Italy, France, Switzerland" placeholder="e.g., Japan, South Korea" class="w-full bg-slate-50 dark:bg-gray-950 border border-slate-200 dark:border-gray-800 rounded-lg px-4 py-3 text-slate-800 dark:text-white focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none mb-6 text-sm">
+            <button onclick="bootstrapMapWorkspace()" class="w-full bg-brand-600 hover:bg-brand-500 text-white font-semibold py-3 rounded-lg transition-colors text-sm">
+                Generate Interactive Base Map
+            </button>
         </div>
     </div>
 
-    <!-- Interface Workspace Control Bar -->
-    <div id="sidebar">
-        <div class="sidebar-block">
-            <h2 style="font-size:1.15rem;" id="trip-header">Voyage Network Map</h2>
-            <p id="country-tag" style="font-size:0.8rem; margin-bottom:0.75rem;"></p>
-            <div class="io-row">
-                <button onclick="exportItineraryArchive()">Export Config</button>
-                <label for="file-input" class="file-label">Import Config</label>
-                <input type="file" id="file-input" accept=".json" onchange="importSavedItinerary(event, false)">
+    <aside id="sidebar" class="w-[440px] bg-white dark:bg-gray-900 border-r border-slate-200 dark:border-gray-800 flex flex-col h-full z-10 shrink-0 shadow-2xl">
+        <!-- Sidebar Header with Actions -->
+        <div class="p-5 border-b border-slate-200 dark:border-gray-800">
+            <div class="flex items-center justify-between mb-1">
+                <h1 class="text-lg font-bold text-slate-900 dark:text-white tracking-tight">Global Route Architect</h1>
+                <div class="flex items-center gap-2">
+                    <button onclick="toggleTheme()" class="p-1.5 rounded-lg bg-slate-100 dark:bg-gray-800 text-slate-700 dark:text-gray-300 hover:bg-slate-200 dark:hover:bg-gray-700 transition-all" title="Toggle Theme">
+                        <svg id="theme-sun" class="w-4 h-4 hidden dark:block" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m12.728 12.728l.707.707M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        <svg id="theme-moon" class="w-4 h-4 block dark:hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                    </button>
+                    <span class="text-xs bg-slate-100 dark:bg-gray-800 text-brand-600 dark:text-brand-400 font-semibold px-2 py-1 rounded">V4.0 Pro</span>
+                </div>
             </div>
-        </div>
-
-        <!-- Node Tree Entry Modals Panel -->
-        <div class="sidebar-block" style="background: rgba(0,0,0,0.15);">
-            <h3 style="font-size:0.85rem; color:var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Add Route Location Stop</h3>
+            <p id="active-countries" class="text-xs text-slate-500 dark:text-gray-500 mb-4 truncate"></p>
             
-            <select id="target-node-type" onchange="toggleFormContext()">
-                <option value="main">Create New Primary Stop</option>
-                <option value="sub">Create Nested Sub-location</option>
-            </select>
-
-            <!-- Parent Target Assignment Dynamic Selector Node -->
-            <div id="parent-selector-wrapper" style="display:none;">
-                <select id="parent-stop-id"></select>
+            <div class="grid grid-cols-3 gap-2">
+                <button onclick="triggerExportWorkflow()" class="bg-slate-50 hover:bg-slate-100 dark:bg-gray-800 dark:hover:bg-gray-700 text-slate-700 dark:text-gray-200 border border-slate-200 dark:border-gray-700 text-[10px] font-semibold py-2 px-1 rounded-lg transition-colors flex flex-col items-center justify-center gap-1">
+                    <svg class="w-4 h-4 text-brand-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    Export JSON
+                </button>
+                <button onclick="triggerCSVExportWorkflow()" class="bg-slate-50 hover:bg-slate-100 dark:bg-gray-800 dark:hover:bg-gray-700 text-slate-700 dark:text-gray-200 border border-slate-200 dark:border-gray-700 text-[10px] font-semibold py-2 px-1 rounded-lg transition-colors flex flex-col items-center justify-center gap-1" title="Format perfectly designed to import straight to My Maps">
+                    <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    CSV for G-Maps
+                </button>
+                <button onclick="triggerImportSelector()" class="bg-slate-50 hover:bg-slate-100 dark:bg-gray-800 dark:hover:bg-gray-700 text-slate-700 dark:text-gray-200 border border-slate-200 dark:border-gray-700 text-[10px] font-semibold py-2 px-1 rounded-lg transition-colors flex flex-col items-center justify-center gap-1">
+                    <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    Load Blueprint
+                </button>
             </div>
-
-            <input type="text" id="loc-name" placeholder="Search location or city name...">
-            <div class="inline-inputs">
-                <input type="number" id="loc-lat" step="any" placeholder="Lat (Optional)">
-                <input type="number" id="loc-lng" step="any" placeholder="Lng (Optional)">
-            </div>
-            <button onclick="handleAddNodePipeline()">Commit Route Point</button>
+            <input type="file" id="blueprint-file-input" class="hidden" accept=".json" onchange="loadBlueprintHandler(event)">
         </div>
 
-        <!-- Interactive Nested Location Scrolling Area Layout -->
-        <div class="location-tree" id="location-tree-root"></div>
-    </div>
+        <div class="overflow-y-auto flex-1 divide-y divide-slate-100 dark:divide-gray-800/60">
+            
+            <!-- Tag Definition System -->
+            <details class="group p-5" open>
+                <summary class="flex justify-between items-center font-semibold text-xs text-slate-400 dark:text-gray-400 uppercase tracking-wider cursor-pointer list-none">
+                    <span>Tag Catalog</span>
+                    <span class="transition group-open:rotate-180 text-slate-500">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </span>
+                </summary>
+                <div class="mt-4 space-y-3">
+                    <div class="flex gap-2">
+                        <input type="text" id="new-tag-name" placeholder="Tag Label (e.g., Sightseeing)" class="flex-1 bg-slate-50 dark:bg-gray-950 border border-slate-200 dark:border-gray-800 rounded-lg px-3 py-1.5 text-xs text-slate-800 dark:text-white focus:border-brand-500 outline-none">
+                        <input type="color" id="new-tag-color" value="#6366f1" class="w-8 h-8 bg-transparent border-0 cursor-pointer rounded-lg shrink-0">
+                        <button onclick="createNewTag()" class="bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs px-3 rounded-lg transition-colors">Add</button>
+                    </div>
+                    <div id="tags-badge-cloud" class="flex flex-wrap gap-1.5 pt-1">
+                        <!-- Custom Tags populated here -->
+                    </div>
+                </div>
+            </details>
 
-    <!-- Active Visualization Mapping Canvas -->
-    <div id="map-container">
-        <div id="map"></div>
-    </div>
-
-    <!-- Leaflet Engine Logic Infrastructure Layers Scripting -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script>
-        let map;
-        let itineraryTree = []; // Operational tree storage holding {id, name, lat, lng, showSub: true, connectSub: true, subLocations: []}
-        let mapLayers = { markers: [], polylines: [], arrows: [] };
-
-        // Toggle generation configurations between Top-level stops vs nested positions
-        function toggleFormContext() {
-            const type = document.getElementById('target-node-type').value;
-            document.getElementById('parent-selector-wrapper').style.display = (type === 'sub') ? 'block' : 'none';
-            refreshParentSelectorDropdown();
-        }
-
-        function refreshParentSelectorDropdown() {
-            const dropdown = document.getElementById('parent-stop-id');
-            dropdown.innerHTML = '';
-            if(itineraryTree.length === 0) {
-                dropdown.innerHTML = '<option value="">(No Primary Stops Exist Yet)</option>';
-                return;
-            }
-            itineraryTree.forEach(stop => {
-                dropdown.innerHTML += `<option value="${stop.id}">Nest inside: ${stop.name}</option>`;
-            });
-        }
-
-        // Bootstrapping engine functions clearing onboarding views
-        async function initializeWorkspace(loadedTreeData) {
-            let countries = document.getElementById('target-countries').value.trim();
-            document.getElementById('setup-screen').style.opacity = '0';
-            setTimeout(() => document.getElementById('setup-screen').style.display = 'none', 300);
-
-            // Construct baseline mapping system
-            map = L.map('map').setView([20, 0], 2);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
-            }).addTo(map);
-
-            // Click capture mechanics mapping back data fields
-            map.on('click', (e) => {
-                document.getElementById('loc-lat').value = e.latlng.lat.toFixed(6);
-                document.getElementById('loc-lng').value = e.latlng.lng.toFixed(6);
-                if(!document.getElementById('loc-name').value) {
-                    document.getElementById('loc-name').value = `Picked Point (${e.latlng.lat.toFixed(2)}, ${e.latlng.lng.toFixed(2)})`;
-                }
-            });
-
-            if (loadedTreeData) {
-                itineraryTree = loadedTreeData;
-                document.getElementById('country-tag').innerText = "Restored configurations from local document file structure.";
-                renderItineraryFramework();
-                zoomToFitFullRoute();
-            } else {
-                if(!countries) countries = "Global Workspace Area";
-                document.getElementById('country-tag').innerText = `Primary Target Grid Bounds: ${countries}`;
-                try {
-                    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(countries)}`);
-                    const data = await res.json();
-                    if(data && data.length > 0) map.setView([parseFloat(data[0].lat), parseFloat(data[0].lon)], 5);
-                } catch(e) {}
-                renderItineraryFramework();
-            }
-        }
-
-        // Structural operational pipeline managing parsing workflows
-        async function handleAddNodePipeline() {
-            const type = document.getElementById('target-node-type').value;
-            const nameInput = document.getElementById('loc-name');
-            const latInput = document.getElementById('loc-lat');
-            const lngInput = document.getElementById('loc-lng');
-
-            let name = nameInput.value.trim();
-            let lat = parseFloat(latInput.value);
-            let lng = parseFloat(lngInput.value);
-
-            if (!name) return alert("Please clarify a recognizable title identifier node.");
-
-            // Automatic geocoding resolver fallback mechanics
-            if (isNaN(lat) || isNaN(lng)) {
-                try {
-                    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(name)}`);
-                    const data = await res.json();
-                    if(data && data.length > 0) {
-                        lat = parseFloat(data[0].lat);
-                        lng = parseFloat(data[0].lon);
-                        name = data[0].display_name.split(',')[0];
-                    } else {
-                        return alert("No coordinate positioning data returned. Click manually inside map canvas space to extract.");
-                    }
-                } catch(e) { return alert("Network tracking exceptions caught managing resolution loops."); }
-            }
-
-            const uniqueNodeId = Date.now().toString();
-
-            if (type === 'main') {
-                itineraryTree.push({
-                    id: uniqueNodeId, name, lat, lng,
-                    showSub: true, connectSub: true, subLocations: []
-                });
-            } else {
-                const parentId = document.getElementById('parent-stop-id').value;
-                const parentStop = itineraryTree.find(s => s.id === parentId);
-                if(!parentStop) return alert("Invalid structural target hierarchy matching configurations operations parsing.");
-                parentStop.subLocations.push({ id: uniqueNodeId, name, lat, lng });
-            }
-
-            nameInput.value = ''; latInput.value = ''; lngInput.value = '';
-            refreshParentSelectorDropdown();
-            renderItineraryFramework();
-            map.setView([lat, lng], Math.max(map.getZoom(), 7));
-        }
-
-        // Deep functional recursive compiler formatting workspace trees and dynamic layers mappings
-        function renderItineraryFramework() {
-            // Standard cleanup flushing maps operational canvas spaces
-            Object.keys(mapLayers).forEach(layerKey => {
-                mapLayers[layerKey].forEach(layer => map.removeLayer(layer));
-                mapLayers[layerKey] = [];
-            });
-
-            const treeContainer = document.getElementById('location-tree-root');
-            treeContainer.innerHTML = '';
-
-            itineraryTree.forEach((mainLoc, mainIdx) => {
-                // Construct Main Element Segment Dom Blocks
-                const mainNodeElement = document.createElement('div');
-                mainNodeElement.className = 'main-loc-card';
+            <!-- Dynamic Location Form -->
+            <div class="p-5">
+                <h3 class="font-semibold text-xs text-slate-400 dark:text-gray-400 uppercase tracking-wider mb-4">Append Geographic Location Node</h3>
                 
-                let subLocsHTML = '';
-                if (mainLoc.showSub && mainLoc.subLocations.length > 0) {
-                    subLocsHTML += `
-                        <div class="sub-loc-container">
-                            <div class="sub-route-toggle-container">
-                                <span>Connect Sub-locations with Route</span>
-                                <input type="checkbox" class="sub-route-checkbox" ${mainLoc.connectSub ? 'checked' : ''} 
-                                    onclick="toggleSubRouteLine('${mainLoc.id}', this.checked)">
-                            </div>
-                    `;
-                    mainLoc.subLocations.forEach((sub) => {
-                        subLocsHTML += `
-                            <div class="sub-loc-item" 
-                                 onmouseenter="isolateMapAsset('${sub.id}', 'sub')" 
-                                 onmouseleave="resetMapAssetIsolations()">
-                                <div>
-                                    <div style="font-weight:600;">${sub.name}</div>
-                                    <div style="font-size:0.7rem; color:var(--text-muted); font-family:monospace;">${sub.lat.toFixed(3)}, ${sub.lng.toFixed(3)}</div>
-                                </div>
-                                <button class="del-icon" onclick="removeSubNode('${mainLoc.id}', '${sub.id}', event)">×</button>
-                            </div>
-                        `;
-                    });
-                    subLocsHTML += `</div>`;
-                }
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs text-slate-500 dark:text-gray-400 mb-1">Structural Parent Anchor</label>
+                        <select id="parent-node-selector" class="w-full bg-slate-50 dark:bg-gray-950 border border-slate-200 dark:border-gray-800 rounded-lg px-3 py-2 text-xs text-slate-800 dark:text-white focus:border-brand-500 outline-none">
+                            <option value="ROOT">ROOT (Global Level)</option>
+                        </select>
+                    </div>
 
-                mainNodeElement.innerHTML = `
-                    <div class="main-loc-header" 
-                         onclick="focusZoomMainLocation('${mainLoc.id}')"
-                         onmouseenter="isolateMapAsset('${mainLoc.id}', 'main', ${mainIdx})"
-                         onmouseleave="resetMapAssetIsolations()">
-                        <div class="main-loc-info">
-                            <div class="main-loc-title">${mainIdx + 1}. ${mainLoc.name}</div>
-                            <div class="main-loc-meta">${mainLoc.subLocations.length} sub-locations registered</div>
+                    <div>
+                        <label class="block text-xs text-slate-500 dark:text-gray-400 mb-1">Location Label</label>
+                        <input type="text" id="new-node-name" placeholder="Destination Name (e.g., Rome)" class="w-full bg-slate-50 dark:bg-gray-950 border border-slate-200 dark:border-gray-800 rounded-lg px-3 py-2 text-xs text-slate-800 dark:text-white focus:border-brand-500 outline-none">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-xs text-slate-500 dark:text-gray-400 mb-1">Latitude</label>
+                            <input type="number" id="new-node-lat" step="any" placeholder="Auto-filled on map click" class="w-full bg-slate-50 dark:bg-gray-950 border border-slate-200 dark:border-gray-800 rounded-lg px-3 py-2 text-xs text-slate-800 dark:text-white focus:border-brand-500 outline-none">
                         </div>
-                        <div class="controls-inline" onclick="event.stopPropagation();">
-                            <button class="del-icon" onclick="removeMainNode('${mainLoc.id}', event)">Delete</button>
-                            <span class="collapse-toggle" onclick="toggleSubVisibility('${mainLoc.id}')">
-                                ${mainLoc.showSub ? '▼' : '►'}
-                            </span>
+                        <div>
+                            <label class="block text-xs text-slate-500 dark:text-gray-400 mb-1">Longitude</label>
+                            <input type="number" id="new-node-lng" step="any" placeholder="Auto-filled on map click" class="w-full bg-slate-50 dark:bg-gray-950 border border-slate-200 dark:border-gray-800 rounded-lg px-3 py-2 text-xs text-slate-800 dark:text-white focus:border-brand-500 outline-none">
                         </div>
                     </div>
-                    ${subLocsHTML}
+
+                    <div class="bg-slate-50 dark:bg-gray-950 p-3 rounded-lg border border-slate-200 dark:border-gray-800 space-y-2">
+                        <div class="flex items-start gap-2">
+                            <input type="checkbox" id="new-node-connect" checked class="mt-0.5 rounded text-brand-600 focus:ring-brand-500 border-slate-300 dark:border-gray-800 bg-slate-50 dark:bg-gray-950">
+                            <label for="new-node-connect" class="text-xs text-slate-500 dark:text-gray-400 leading-tight">
+                                Draw route connecting direct sublocations of this stop.
+                            </label>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs text-slate-500 dark:text-gray-400 mb-1.5">Assign Catalog Tags</label>
+                        <div id="form-tag-selectors" class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto bg-slate-50 dark:bg-gray-950 p-2.5 rounded-lg border border-slate-200 dark:border-gray-800">
+                            <!-- Dynamic Tag Checkboxes -->
+                        </div>
+                    </div>
+
+                    <button onclick="commitLocationNode()" class="w-full bg-brand-600 hover:bg-brand-500 text-white font-semibold py-2 px-4 rounded-lg transition-colors text-xs mt-2 shadow-lg">
+                        Append Node & Update Visuals
+                    </button>
+                </div>
+            </div>
+
+            <!-- Live Filter System -->
+            <div class="p-5 bg-slate-50/50 dark:bg-gray-900/50">
+                <h3 class="font-semibold text-xs text-slate-400 dark:text-gray-400 uppercase tracking-wider mb-3">Live Filter Matrix</h3>
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs text-slate-500 dark:text-gray-500 mb-1">Select Scope Branch</label>
+                        <select id="filter-branch-selector" onchange="runFilterMatrixPipeline()" class="w-full bg-slate-50 dark:bg-gray-950 border border-slate-200 dark:border-gray-800 rounded-lg px-3 py-1.5 text-xs text-slate-800 dark:text-white outline-none">
+                            <option value="ALL">Entire Itinerary (All Nodes)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-500 dark:text-gray-500 mb-1.5 font-medium">Filter by Assigned Tags</label>
+                        <div id="filter-tag-container" class="flex flex-wrap gap-1.5">
+                            <!-- Populated with toggleable filter tag capsules -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Blueprint List Render -->
+            <div class="p-5">
+                <h3 class="font-semibold text-xs text-slate-400 dark:text-gray-400 uppercase tracking-wider mb-4">Hierarchical Blueprint Tree</h3>
+                <div id="itinerary-tree-root" class="space-y-1">
+                    <!-- Recursive Interactive Tree rendering happens here -->
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Map Canvas Element Workspace -->
+    <main id="map-container" class="flex-1 h-full relative">
+        <div id="map" class="w-full h-full"></div>
+    </main>
+
+    <!-- Core Leaflet Engine Setup -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Global Datastores
+        let map;
+        let globalLocationsTree = []; // Multi-tiered nested hierarchy of location nodes
+        let globalTags = [
+            { id: 'tag_sightseeing', name: 'Sightseeing', color: '#3b82f6' },
+            { id: 'tag_dining', name: 'Dining', color: '#10b981' },
+            { id: 'tag_transit', name: 'Transit Hub', color: '#f59e0b' },
+            { id: 'tag_lodging', name: 'Lodging', color: '#ec4899' }
+        ];
+
+        // Active State Tracking Parameters
+        let activeFilterBranch = "ALL";
+        let activeFilterTags = []; // Array of tagIds to intersect
+        let mapLayersCache = [];
+        let tileLayer = null;
+
+        // Dynamic State Tracker for next added node
+        let currentlySelectedParentId = "ROOT";
+
+        // Toast Notification System (Scrubbing native alert/confirm popups)
+        function showNotification(message, type = 'info') {
+            const container = document.getElementById('toast-container') || createToastContainer();
+            const toast = document.createElement('div');
+            toast.className = `flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg border text-sm transition-all transform translate-y-10 opacity-0 duration-300 pointer-events-auto ${
+                type === 'error' 
+                    ? 'bg-red-50 dark:bg-red-950/80 text-red-800 dark:text-red-200 border-red-200 dark:border-red-900/50' 
+                    : 'bg-white dark:bg-gray-900 text-slate-800 dark:text-gray-100 border-slate-200 dark:border-gray-800 shadow-xl'
+            }`;
+            toast.innerHTML = `<span>${message}</span>`;
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.classList.remove('translate-y-10', 'opacity-0');
+            }, 10);
+            
+            setTimeout(() => {
+                toast.classList.add('translate-y-10', 'opacity-0');
+                setTimeout(() => {
+                    toast.remove();
+                }, 300);
+            }, 4000);
+        }
+
+        function createToastContainer() {
+            const container = document.createElement('div');
+            container.id = 'toast-container';
+            container.className = 'absolute bottom-6 left-1/2 transform -translate-x-1/2 z-[10000] flex flex-col gap-2 pointer-events-none';
+            document.body.appendChild(container);
+            return container;
+        }
+
+        // Adaptive Theme State Engine
+        function toggleTheme() {
+            const html = document.documentElement;
+            if (html.classList.contains('dark')) {
+                html.classList.remove('dark');
+                localStorage.setItem('theme', 'light');
+                updateMapTileLayer('light');
+            } else {
+                html.classList.add('dark');
+                localStorage.setItem('theme', 'dark');
+                updateMapTileLayer('dark');
+            }
+        }
+
+        function updateMapTileLayer(theme) {
+            if (tileLayer) {
+                map.removeLayer(tileLayer);
+            }
+            const url = theme === 'dark' 
+                ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+                : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+            tileLayer = L.tileLayer(url, {
+                maxZoom: 20
+            }).addTo(map);
+        }
+
+        async function bootstrapMapWorkspace() {
+            const countryQuery = document.getElementById('target-countries').value.trim();
+            if (!countryQuery) {
+                showNotification("Please specify at least one target territory.", "error");
+                return;
+            }
+
+            // Fade and hide setup overlay
+            const screen = document.getElementById('setup-screen');
+            screen.classList.add('opacity-0');
+            setTimeout(() => {
+                screen.classList.add('hidden');
+                if (map) {
+                    map.invalidateSize();
+                }
+            }, 300);
+
+            document.getElementById('active-countries').innerText = `Active Scope: ${countryQuery}`;
+
+            // Initialize Map object configured with a dark or light styled spatial projection map
+            map = L.map('map', { zoomControl: true, attributionControl: false }).setView([20, 0], 2);
+
+            // Determine starting system theme
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            if (savedTheme === 'light') {
+                document.documentElement.classList.remove('dark');
+            } else {
+                document.documentElement.classList.add('dark');
+            }
+            updateMapTileLayer(savedTheme);
+
+            // Attempt automated boundary panning setup using OpenStreetMap public api
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(countryQuery)}`);
+                const data = await response.json();
+                if (data && data.length > 0) {
+                    const lat = parseFloat(data[0].lat);
+                    const lon = parseFloat(data[0].lon);
+                    map.setView([lat, lon], 6);
+                }
+            } catch (e) {
+                console.warn("Auto panning setup bounds returned no values.", e);
+            }
+
+            // Bind click listeners for easy coordinates logging
+            map.on('click', function(e) {
+                document.getElementById('new-node-lat').value = e.latlng.lat.toFixed(6);
+                document.getElementById('new-node-lng').value = e.latlng.lng.toFixed(6);
+            });
+
+            // Initial UI Sync
+            synchronizeTagLibraries();
+            synchronizeDropdownSelectors();
+            renderDynamicInterface();
+        }
+
+        function createNewTag() {
+            const nameInput = document.getElementById('new-tag-name');
+            const colorInput = document.getElementById('new-tag-color');
+            const name = nameInput.value.trim();
+
+            if (!name) return;
+
+            const newTag = {
+                id: 'tag_' + Date.now(),
+                name: name,
+                color: colorInput.value
+            };
+
+            globalTags.push(newTag);
+            nameInput.value = '';
+
+            synchronizeTagLibraries();
+            renderDynamicInterface();
+            showNotification(`Created tag "${name}" successfully.`);
+        }
+
+        function removeTag(tagId) {
+            const tag = globalTags.find(t => t.id === tagId);
+            globalTags = globalTags.filter(t => t.id !== tagId);
+            
+            // Scrub deleted tag associations from our existing location nodes
+            traverseTreeAndPerform(globalLocationsTree, node => {
+                node.tagIds = node.tagIds.filter(id => id !== tagId);
+            });
+
+            activeFilterTags = activeFilterTags.filter(id => id !== tagId);
+
+            synchronizeTagLibraries();
+            renderDynamicInterface();
+            if (tag) showNotification(`Deleted tag "${tag.name}"`);
+        }
+
+        function synchronizeTagLibraries() {
+            // Render tags cloud badge view
+            const badgeContainer = document.getElementById('tags-badge-cloud');
+            badgeContainer.innerHTML = '';
+            
+            globalTags.forEach(tag => {
+                const badge = document.createElement('span');
+                badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold select-none transition-all';
+                badge.style.backgroundColor = `${tag.color}15`;
+                badge.style.color = tag.color;
+                badge.style.border = `1px solid ${tag.color}30`;
+                
+                badge.innerHTML = `
+                    <span>${tag.name}</span>
+                    <button onclick="removeTag('${tag.id}')" class="hover:text-red-500 dark:hover:text-white transition-colors ml-1 font-bold">×</button>
                 `;
-                treeContainer.appendChild(mainNodeElement);
+                badgeContainer.appendChild(badge);
+            });
 
-                // Plot Primary Markers
-                const mainMarker = L.circleMarker([mainLoc.lat, mainLoc.lng], {
-                    radius: 9, fillColor: '#6366f1', color: '#fff', weight: 2, fillOpacity: 1
-                }).addTo(map).bindPopup(`<b>${mainLoc.name}</b><br>Primary Route Stop #${mainIdx + 1}`);
-                mainMarker._idRef = mainLoc.id; mainMarker._typeRef = 'main'; mainMarker._indexRef = mainIdx;
-                mapLayers.markers.push(mainMarker);
-
-                // Plot Child Locations Markers
-                mainLoc.subLocations.forEach(sub => {
-                    const subMarker = L.circleMarker([sub.lat, sub.lng], {
-                        radius: 6, fillColor: '#10b981', color: '#fff', weight: 1.5, fillOpacity: 0.9
-                    }).addTo(map).bindPopup(`<b>${sub.name}</b><br>Sublocation of: ${mainLoc.name}`);
-                    subMarker._idRef = sub.id; subMarker._typeRef = 'sub'; subMarker._parentIdRef = mainLoc.id;
-                    mapLayers.markers.push(subMarker);
+            // Sync creation form checkboxes
+            const formContainer = document.getElementById('form-tag-selectors');
+            formContainer.innerHTML = '';
+            
+            if (globalTags.length === 0) {
+                formContainer.innerHTML = '<span class="text-xs text-slate-400 dark:text-gray-600 italic">No custom tags initialized</span>';
+            } else {
+                globalTags.forEach(tag => {
+                    const label = document.createElement('label');
+                    label.className = 'flex items-center gap-1.5 text-xs text-slate-700 dark:text-gray-300 cursor-pointer hover:text-slate-900 dark:hover:text-white bg-white dark:bg-gray-900 px-2 py-1 rounded border border-slate-200 dark:border-gray-800 transition-colors';
+                    label.innerHTML = `
+                        <input type="checkbox" name="form-tags" value="${tag.id}" class="rounded text-brand-600 focus:ring-brand-500 border-slate-300 dark:border-gray-800 bg-slate-50 dark:bg-gray-950">
+                        <span style="color: ${tag.color}; font-weight: 600;">●</span>
+                        <span>${tag.name}</span>
+                    `;
+                    formContainer.appendChild(label);
                 });
+            }
 
-                // Structural rendering parameters drawing localized inside nested sub routes vectors
-                if(mainLoc.showSub && mainLoc.connectSub && mainLoc.subLocations.length > 0) {
-                    for(let k = 0; k < mainLoc.subLocations.length - 1; k++) {
-                        const subS = mainLoc.subLocations[k];
-                        const subE = mainLoc.subLocations[k+1];
+            // Sync Filter active tag selection bubbles
+            const filterTagContainer = document.getElementById('filter-tag-container');
+            filterTagContainer.innerHTML = '';
+            
+            globalTags.forEach(tag => {
+                const isSelected = activeFilterTags.includes(tag.id);
+                const chip = document.createElement('button');
+                chip.onclick = () => toggleFilterTagSelection(tag.id);
+                
+                if (isSelected) {
+                    chip.className = 'px-3 py-1 rounded-full text-xs font-semibold border transition-all';
+                    chip.style.backgroundColor = tag.color;
+                    chip.style.color = '#fff';
+                    chip.style.borderColor = tag.color;
+                } else {
+                    chip.className = 'px-3 py-1 rounded-full text-xs font-semibold border transition-all bg-transparent hover:bg-slate-100 dark:hover:bg-gray-800';
+                    chip.style.color = tag.color;
+                    chip.style.borderColor = `${tag.color}60`;
+                }
+                
+                chip.innerText = tag.name;
+                filterTagContainer.appendChild(chip);
+            });
+        }
+
+        function toggleFilterTagSelection(tagId) {
+            if (activeFilterTags.includes(tagId)) {
+                activeFilterTags = activeFilterTags.filter(id => id !== tagId);
+            } else {
+                activeFilterTags.push(tagId);
+            }
+            synchronizeTagLibraries();
+            runFilterMatrixPipeline();
+        }
+
+        function synchronizeDropdownSelectors() {
+            const parentDropdown = document.getElementById('parent-node-selector');
+            const branchDropdown = document.getElementById('filter-branch-selector');
+
+            // Collect active selection IDs to preserve state on redraw
+            const currentSelectedBranch = branchDropdown.value || "ALL";
+
+            // Reset defaults
+            parentDropdown.innerHTML = '<option value="ROOT">ROOT (Global Level)</option>';
+            branchDropdown.innerHTML = '<option value="ALL">Entire Itinerary (All Nodes)</option>';
+
+            const flatNodes = [];
+            
+            // Recursive crawler to assemble absolute hierarchy path directories
+            function traceNodes(nodes, depthString = "") {
+                nodes.forEach(node => {
+                    flatNodes.push({
+                        id: node.id,
+                        displayName: `${depthString}↳ ${node.name}`
+                    });
+                    if (node.children && node.children.length > 0) {
+                        traceNodes(node.children, depthString + "  ");
+                    }
+                });
+            }
+
+            traceNodes(globalLocationsTree);
+
+            flatNodes.forEach(item => {
+                parentDropdown.innerHTML += `<option value="${item.id}">${item.displayName}</option>`;
+                branchDropdown.innerHTML += `<option value="${item.id}">${item.displayName}</option>`;
+            });
+
+            // Re-apply states if they exist after updates
+            parentDropdown.value = currentlySelectedParentId;
+            branchDropdown.value = currentSelectedBranch;
+        }
+
+        async function commitLocationNode() {
+            const parentId = document.getElementById('parent-node-selector').value;
+            const name = document.getElementById('new-node-name').value.trim();
+            let lat = parseFloat(document.getElementById('new-node-lat').value);
+            let lng = parseFloat(document.getElementById('new-node-lng').value);
+            const connectChildren = document.getElementById('new-node-connect').checked;
+
+            if (!name) {
+                showNotification("Please clarify a target name for this node.", "error");
+                return;
+            }
+
+            // Resolve selected checkbox tags
+            const tagCheckboxes = document.querySelectorAll('input[name="form-tags"]:checked');
+            const checkedTagIds = Array.from(tagCheckboxes).map(cb => cb.value);
+
+            // Fetch coordinates from geocoding service if empty
+            if (isNaN(lat) || isNaN(lng)) {
+                try {
+                    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(name)}`);
+                    const data = await response.json();
+                    if (data && data.length > 0) {
+                        lat = parseFloat(data[0].lat);
+                        lng = parseFloat(data[0].lon);
+                    } else {
+                        showNotification("Unable to automatically resolve coordinates. Please select manually on the map canvas.", "error");
+                        return;
+                    }
+                } catch (e) {
+                    showNotification("Failed contacting remote directory geocoding agent.", "error");
+                    return;
+                }
+            }
+
+            const newNode = {
+                id: 'node_' + Date.now(),
+                name: name,
+                lat: lat,
+                lng: lng,
+                parentId: parentId,
+                connectChildren: connectChildren,
+                expanded: true,
+                tagIds: checkedTagIds,
+                children: []
+            };
+
+            if (parentId === 'ROOT') {
+                globalLocationsTree.push(newNode);
+            } else {
+                const targetParent = findNodeInTree(globalLocationsTree, parentId);
+                if (targetParent) {
+                    targetParent.children.push(newNode);
+                } else {
+                    showNotification("Target structural anchor point not verified.", "error");
+                    return;
+                }
+            }
+
+            // AUTO-SELECT DESIGN COMPONENT: Update default selections immediately to newly added node
+            currentlySelectedParentId = newNode.id;
+
+            // Clear active entry form values
+            document.getElementById('new-node-name').value = '';
+            document.getElementById('new-node-lat').value = '';
+            document.getElementById('new-node-lng').value = '';
+            
+            // Clean active tag checkboxes
+            document.querySelectorAll('input[name="form-tags"]:checked').forEach(cb => cb.checked = false);
+
+            synchronizeDropdownSelectors();
+            renderDynamicInterface();
+            showNotification(`Successfully appended "${name}" to route.`);
+            
+            // Pan smoothly to focus point
+            map.setView([lat, lng], Math.max(map.getZoom(), 8));
+        }
+
+        let matchedNodeIdsSet = new Set();
+        let pathsToPreserveSet = new Set();
+        let isFilterActiveMode = false;
+
+        function runFilterMatrixPipeline() {
+            activeFilterBranch = document.getElementById('filter-branch-selector').value;
+            
+            matchedNodeIdsSet.clear();
+            pathsToPreserveSet.clear();
+
+            const isTagFiltering = activeFilterTags.length > 0;
+            const isBranchFiltering = activeFilterBranch !== "ALL";
+            isFilterActiveMode = isTagFiltering || isBranchFiltering;
+
+            if (isFilterActiveMode) {
+                // Determine bounding node
+                let searchTargetArray = globalLocationsTree;
+                if (isBranchFiltering) {
+                    const targetBranchNode = findNodeInTree(globalLocationsTree, activeFilterBranch);
+                    searchTargetArray = targetBranchNode ? [targetBranchNode] : [];
+                }
+
+                // Recursively crawl targeted branch looking for tags match
+                searchTargetArray.forEach(node => evaluateFilterStateRecursive(node, []));
+            }
+
+            renderDynamicInterface();
+        }
+
+        function evaluateFilterStateRecursive(node, ancestorChainList) {
+            const currentChain = [...ancestorChainList, node.id];
+
+            // Evaluate if node satisfies active filter requirements
+            let isTagMatched = true;
+            if (activeFilterTags.length > 0) {
+                // Must match ALL active filter tags
+                isTagMatched = activeFilterTags.every(filterTagId => node.tagIds.includes(filterTagId));
+            }
+
+            if (isTagMatched) {
+                matchedNodeIdsSet.add(node.id);
+                // Flag all parents along the active branch sequence to prevent orphaned nodes
+                currentChain.forEach(id => pathsToPreserveSet.add(id));
+            }
+
+            if (node.children && node.children.length > 0) {
+                node.children.forEach(child => evaluateFilterStateRecursive(child, currentChain));
+            }
+        }
+
+        function evaluateNodeVisibleState(nodeId) {
+            if (!isFilterActiveMode) return true;
+            return pathsToPreserveSet.has(nodeId);
+        }
+
+        function renderDynamicInterface() {
+            // Render Sidebar Accordion DOM
+            const treeContainer = document.getElementById('itinerary-tree-root');
+            treeContainer.innerHTML = '';
+
+            if (globalLocationsTree.length === 0) {
+                treeContainer.innerHTML = `
+                    <div class="text-center py-8 text-slate-400 dark:text-gray-500 border border-dashed border-slate-200 dark:border-gray-800 rounded-xl">
+                        <p class="text-xs">No active travel spots plotted yet.</p>
+                        <p class="text-[10px] text-slate-400 dark:text-gray-600 mt-1">Select location above or click inside map bounds to register nodes.</p>
+                    </div>
+                `;
+            } else {
+                globalLocationsTree.forEach(rootNode => {
+                    const renderedElement = generateTreeMarkupDOM(rootNode, 0);
+                    if (renderedElement) treeContainer.appendChild(renderedElement);
+                });
+            }
+
+            // Sync Map Layers
+            refreshCanvasMapOverlay();
+        }
+
+        function generateTreeMarkupDOM(node, depth) {
+            // Drop node instantly if filters are active and this path isn't mapped
+            if (isFilterActiveMode && !pathsToPreserveSet.has(node.id)) return null;
+
+            const hasChildren = node.children && node.children.length > 0;
+            const container = document.createElement('div');
+            container.className = `flex flex-col select-none rounded-lg border border-transparent transition-all`;
+            
+            // Build dynamic padding offset styling based on depth
+            const indentStyle = `padding-left: ${depth * 14}px;`;
+
+            // Assemble Tag markup capsules
+            let tagsMarkup = '';
+            node.tagIds.forEach(id => {
+                const found = globalTags.find(t => t.id === id);
+                if (found) {
+                    tagsMarkup += `<span class="w-1.5 h-1.5 rounded-full inline-block shrink-0 shadow-sm" style="background-color: ${found.color};" title="${found.name}"></span>`;
+                }
+            });
+
+            const isSelectedParent = (node.id === currentlySelectedParentId);
+
+            container.innerHTML = `
+                <div class="group/node flex items-center justify-between p-2 hover:bg-slate-100 dark:hover:bg-gray-800/80 rounded-lg transition-all ${isSelectedParent ? 'bg-brand-500/10 border-brand-500/30' : ''}" style="${indentStyle}">
+                    <div class="flex items-center gap-2 min-w-0 flex-1">
+                        ${hasChildren ? `
+                            <button class="node-toggle-btn text-slate-400 hover:text-slate-800 dark:hover:text-white shrink-0 p-0.5" onclick="toggleNodeExpansionState('${node.id}', event)">
+                                <svg class="w-3 h-3 transform transition-transform ${node.expanded ? 'rotate-90' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7"></path></svg>
+                            </button>
+                        ` : '<div class="w-4 shrink-0"></div>'}
                         
-                        const subPoly = L.polyline([[subS.lat, subS.lng], [subE.lat, subE.lng]], {
-                            color: '#10b981', weight: 2, opacity: 0.7, dashArray: '3, 6'
+                        <div class="flex items-center gap-2 min-w-0 cursor-pointer" onclick="focusCanvasMapOnNode('${node.id}', event)">
+                            <span class="text-xs font-semibold truncate ${isSelectedParent ? 'text-brand-600 dark:text-brand-400' : 'text-slate-800 dark:text-gray-200'}">${node.name}</span>
+                            <div class="flex gap-1 items-center shrink-0">
+                                ${tagsMarkup}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Command Suite -->
+                    <div class="opacity-0 group-hover/node:opacity-100 flex items-center gap-1 shrink-0 transition-opacity ml-2">
+                        <button onclick="overrideAnchorSelection('${node.id}', event)" title="Assign as parent for next additions" class="text-slate-400 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 p-1 rounded hover:bg-slate-200 dark:hover:bg-gray-700">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        </button>
+                        <button onclick="triggerCoordinateSearch('${node.id}', event)" title="Zoom Viewport" class="text-slate-400 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white p-1 rounded hover:bg-slate-200 dark:hover:bg-gray-700">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        </button>
+                        <button onclick="purgeNodeElement('${node.id}', event)" title="Delete Node" class="text-slate-400 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 p-1 rounded hover:bg-slate-200 dark:hover:bg-gray-700">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="child-nodes-container space-y-1 mt-1 ${node.expanded ? 'block' : 'hidden'}"></div>
+            `;
+
+            // Hover trigger states targeting spatial markers
+            const headerRow = container.querySelector('.group\\/node');
+            headerRow.addEventListener('pointerenter', () => runIsolationHoverState(node.id));
+            headerRow.addEventListener('pointerleave', clearIsolationHoverStates);
+
+            const childContainer = container.querySelector('.child-nodes-container');
+            
+            if (hasChildren) {
+                node.children.forEach(child => {
+                    const childDOM = generateTreeMarkupDOM(child, depth + 1);
+                    if (childDOM) childContainer.appendChild(childDOM);
+                });
+            }
+
+            return container;
+        }
+
+        function focusCanvasMapOnNode(nodeId, event) {
+            if (event) event.stopPropagation();
+            const targetNode = findNodeInTree(globalLocationsTree, nodeId);
+            if (!targetNode) return;
+
+            // Gather coordinates of this parent and all recursive children to map out zoom fit bounds
+            let coords = [[targetNode.lat, targetNode.lng]];
+            
+            function digCoords(node) {
+                if (node.children && node.children.length > 0) {
+                    node.children.forEach(child => {
+                        if (evaluateNodeVisibleState(child.id)) {
+                            coords.push([child.lat, child.lng]);
+                            digCoords(child);
+                        }
+                    });
+                }
+            }
+            digCoords(targetNode);
+
+            if (coords.length === 1) {
+                map.setView(coords[0], 12);
+            } else {
+                map.fitBounds(L.latLngBounds(coords), { padding: [50, 50], maxZoom: 13 });
+            }
+        }
+
+        function overrideAnchorSelection(nodeId, event) {
+            if (event) event.stopPropagation();
+            currentlySelectedParentId = nodeId;
+            synchronizeDropdownSelectors();
+            renderDynamicInterface();
+            showNotification("Anchor parent designated for next sublocation additions.");
+        }
+
+        function toggleNodeExpansionState(nodeId, event) {
+            if (event) event.stopPropagation();
+            const node = findNodeInTree(globalLocationsTree, nodeId);
+            if (node) {
+                node.expanded = !node.expanded;
+                renderDynamicInterface();
+            }
+        }
+
+        function purgeNodeElement(nodeId, event) {
+            if (event) event.stopPropagation();
+            
+            const node = findNodeInTree(globalLocationsTree, nodeId);
+            globalLocationsTree = deleteNodeFromTree(globalLocationsTree, nodeId);
+
+            if (currentlySelectedParentId === nodeId) {
+                currentlySelectedParentId = "ROOT";
+            }
+
+            synchronizeDropdownSelectors();
+            renderDynamicInterface();
+            if (node) showNotification(`Deleted route stop "${node.name}"`);
+        }
+
+        function refreshCanvasMapOverlay() {
+            // Remove existing overlay tracks
+            mapLayersCache.forEach(layer => map.removeLayer(layer));
+            mapLayersCache = [];
+
+            // Draw route connections & node pins recursively starting from our tree root points
+            globalLocationsTree.forEach(rootNode => {
+                drawRouteTracksRecursive(rootNode);
+                plotGeographicPinsRecursive(rootNode);
+            });
+        }
+
+        function plotGeographicPinsRecursive(node) {
+            if (!evaluateNodeVisibleState(node.id)) return;
+
+            // Generate customized leaflet div icons to support multi-tag colored rings
+            let ringStyles = '';
+            const associatedTags = node.tagIds.map(id => globalTags.find(t => t.id === id)).filter(Boolean);
+            
+            if (associatedTags.length > 0) {
+                // Generate a colored radial gradient border representing assigned markers
+                const colorsStr = associatedTags.map((tag, idx) => {
+                    const percentStart = Math.floor((idx / associatedTags.length) * 100);
+                    const percentEnd = Math.floor(((idx + 1) / associatedTags.length) * 100);
+                    return `${tag.color} ${percentStart}%, ${tag.color} ${percentEnd}%`;
+                }).join(', ');
+                
+                ringStyles = `background: conic-gradient(${colorsStr});`;
+            } else {
+                ringStyles = 'background: #6366f1;';
+            }
+
+            const pinHtml = `
+                <div class="relative w-7 h-7 rounded-full flex items-center justify-center shadow-lg transition-transform hover:scale-125" style="${ringStyles} padding: 3px;">
+                    <div class="w-full h-full rounded-full bg-white dark:bg-gray-900 flex items-center justify-center text-[10px] font-bold text-slate-800 dark:text-white border border-slate-200 dark:border-gray-800">
+                        ${node.name.substring(0, 2).toUpperCase()}
+                    </div>
+                </div>
+            `;
+
+            const icon = L.divIcon({
+                className: 'custom-node-icon',
+                html: pinHtml,
+                iconSize: [28, 28],
+                iconAnchor: [14, 14]
+            });
+
+            const marker = L.marker([node.lat, node.lng], { icon: icon }).addTo(map);
+            
+            // Setup popup metadata templates
+            let popTags = associatedTags.map(t => `<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold" style="background-color:${t.color}20; color:${t.color}">${t.name}</span>`).join(' ');
+            
+            marker.bindPopup(`
+                <div class="bg-white dark:bg-gray-900 text-slate-800 dark:text-gray-100 p-1.5 text-xs rounded-lg border border-slate-100 dark:border-gray-800 shadow-xl min-w-[120px]">
+                    <p class="font-bold text-xs text-slate-900 dark:text-white mb-1.5">${node.name}</p>
+                    <div class="flex flex-wrap gap-1 mb-2">${popTags || '<span class="text-slate-400 dark:text-gray-500 italic">No Tags</span>'}</div>
+                    <p class="text-slate-400 dark:text-gray-500 font-mono text-[9px]">${node.lat.toFixed(5)}, ${node.lng.toFixed(5)}</p>
+                </div>
+            `, { closeButton: false, className: 'custom-leaflet-popup' });
+
+            marker._nodeIdRef = node.id;
+            mapLayersCache.push(marker);
+
+            if (node.children && node.children.length > 0) {
+                node.children.forEach(child => plotGeographicPinsRecursive(child));
+            }
+        }
+
+        function drawRouteTracksRecursive(node) {
+            // Only plot routes under mapped, visible paths
+            if (!evaluateNodeVisibleState(node.id)) return;
+
+            const isExpandedInUI = node.expanded || isFilterActiveMode; // Ignore collapse rules if filters are explicitly overriding view
+            
+            if (isExpandedInUI && node.children && node.children.length > 0) {
+                const visibleDirectChildren = node.children.filter(c => evaluateNodeVisibleState(c.id));
+                
+                if (node.connectChildren && visibleDirectChildren.length > 0) {
+                    // Generate chronological connection track: Parent -> Child 1 -> Child 2...
+                    let pathCoordinates = [[node.lat, node.lng]];
+                    visibleDirectChildren.forEach(child => {
+                        pathCoordinates.push([child.lat, child.lng]);
+                    });
+
+                    if (pathCoordinates.length >= 2) {
+                        const trackLine = L.polyline(pathCoordinates, {
+                            color: '#4f46e5',
+                            weight: 3,
+                            dashArray: '5, 8',
+                            opacity: 0.7,
+                            className: 'itinerary-vector-path'
                         }).addTo(map);
-                        subPoly._parentIdRef = mainLoc.id; subPoly._typeRef = 'subLine';
-                        mapLayers.polylines.push(subPoly);
+
+                        trackLine._nodeIdRef = node.id;
+                        mapLayersCache.push(trackLine);
+
+                        // Attach mid-point helper vector navigation headings
+                        for (let i = 0; i < pathCoordinates.length - 1; i++) {
+                            const p1 = pathCoordinates[i];
+                            const p2 = pathCoordinates[i+1];
+                            appendNavigationArrow(p1, p2, node.id);
+                        }
                     }
                 }
-            });
 
-            // Draw primary connections routes bridging major nodes paths
-            for (let i = 0; i < itineraryTree.length - 1; i++) {
-                const nodeStart = itineraryTree[i];
-                const nodeEnd = itineraryTree[i + 1];
-
-                const mainLine = L.polyline([[nodeStart.lat, nodeStart.lng], [nodeEnd.lat, nodeEnd.lng]], {
-                    color: '#818cf8', weight: 4, opacity: 0.85
-                }).addTo(map);
-                mainLine._typeRef = 'mainLine'; mainLine._indexRef = i;
-                mapLayers.polylines.push(mainLine);
-
-                // Calculate orientation vectors midpaths arrows alignment geometry tracking points
-                const midLat = (nodeStart.lat + nodeEnd.lat) / 2;
-                const midLng = (nodeStart.lng + nodeEnd.lng) / 2;
-                const angle = Math.atan2(nodeEnd.lng - nodeStart.lng, nodeEnd.lat - nodeStart.lat) * 180 / Math.PI;
-
-                const directionArrow = L.marker([midLat, midLng], {
-                    icon: L.divIcon({
-                        className: 'map-arrow-node',
-                        html: `<div style="transform: rotate(${angle}deg); color: #f59e0b; font-size: 18px; line-height: 1;">➔</div>`,
-                        iconSize: [20, 20], iconAnchor: [10, 10]
-                    })
-                }).addTo(map);
-                directionArrow._indexRef = i; directionArrow._typeRef = 'arrow';
-                mapLayers.arrows.push(directionArrow);
+                // Recursively chain deeper nesting nodes
+                node.children.forEach(child => drawRouteTracksRecursive(child));
             }
         }
 
-        // Navigation state manipulation handling actions zoom controls targeting nodes
-        function focusZoomMainLocation(id) {
-            const target = itineraryTree.find(s => s.id === id);
-            if (!target) return;
-            
-            if(target.subLocations.length > 0) {
-                // Bounds boxing dynamic calculations capturing clusters
-                const points = [[target.lat, target.lng], ...target.subLocations.map(s => [s.lat, s.lng])];
-                map.fitBounds(L.latLngBounds(points), { padding: [50, 50], maxZoom: 13 });
-            } else {
-                map.setView([target.lat, target.lng], 12);
-            }
-        }
+        function appendNavigationArrow(coordStart, coordEnd, nodeId) {
+            const midLat = (coordStart[0] + coordEnd[0]) / 2;
+            const midLng = (coordStart[1] + coordEnd[1]) / 2;
+            const bearing = Math.atan2(coordEnd[1] - coordStart[1], coordEnd[0] - coordStart[0]) * 180 / Math.PI;
 
-        function toggleSubVisibility(id) {
-            const stop = itineraryTree.find(s => s.id === id);
-            if(stop) { stop.showSub = !stop.showSub; renderItineraryFramework(); }
-        }
-
-        function toggleSubRouteLine(id, checkValue) {
-            const stop = itineraryTree.find(s => s.id === id);
-            if(stop) { stop.connectSub = checkValue; renderItineraryFramework(); }
-        }
-
-        function removeMainNode(id, event) {
-            event.stopPropagation();
-            itineraryTree = itineraryTree.filter(s => s.id !== id);
-            refreshParentSelectorDropdown();
-            renderItineraryFramework();
-        }
-
-        function removeSubNode(parentId, subId, event) {
-            event.stopPropagation();
-            const parent = itineraryTree.find(s => s.id === parentId);
-            if(parent) {
-                parent.subLocations = parent.subLocations.filter(sub => sub.id !== subId);
-                renderItineraryFramework();
-            }
-        }
-
-        // Realtime element focus filters applied via sidebar list hover streams
-        function isolateMapAsset(id, type, index = null) {
-            mapLayers.markers.forEach(m => {
-                if (type === 'main' && m._idRef === id) {
-                    m.setStyle({ fillColor: '#f59e0b', radius: 12 });
-                } else if (type === 'sub' && m._idRef === id) {
-                    m.setStyle({ fillColor: '#f59e0b', radius: 9 });
-                } else if (type === 'main' && m._parentIdRef === id) {
-                    // Retain brightness for children of focused parent
-                } else {
-                    m.getElement()?.classList.add('map-fade');
-                }
+            const arrowIcon = L.divIcon({
+                className: 'navigation-direction-arrow',
+                html: `<div style="transform: rotate(${bearing}deg); color: #fbbf24; font-size: 14px; font-weight: bold; line-height: 1; text-shadow: 0px 1px 3px rgba(0,0,0,0.8);">➔</div>`,
+                iconSize: [16, 16],
+                iconAnchor: [8, 8]
             });
 
-            mapLayers.polylines.forEach(p => {
-                if (type === 'main' && (p._indexRef === index || p._indexRef === (index - 1)) && p._typeRef === 'mainLine') {
-                    p.getElement()?.classList.add('map-focus');
-                } else if (type === 'main' && p._parentIdRef === id && p._typeRef === 'subLine') {
-                    // Highlight sub-paths inside selected parent
-                } else {
-                    p.getElement()?.classList.add('map-fade');
-                }
-            });
+            const marker = L.marker([midLat, midLng], { icon: arrowIcon }).addTo(map);
+            marker._nodeIdRef = nodeId;
+            mapLayersCache.push(marker);
+        }
 
-            mapLayers.arrows.forEach(a => {
-                if (type === 'main' && (a._indexRef === index || a._indexRef === (index - 1))) {
-                    // Retain visibility for matching vectors
+        function runIsolationHoverState(nodeId) {
+            mapLayersCache.forEach(layer => {
+                const layerNodeId = layer._nodeIdRef;
+                if (!layerNodeId) return;
+
+                const element = layer.getElement();
+                if (!element) return;
+
+                if (layerNodeId === nodeId) {
+                    element.classList.remove('map-fade');
+                    if (layer instanceof L.Polyline) {
+                        element.classList.add('map-highlight');
+                    }
                 } else {
-                    a.getElement()?.classList.add('map-fade');
+                    element.classList.add('map-fade');
                 }
             });
         }
 
-        function resetMapAssetIsolations() {
-            mapLayers.markers.forEach(m => {
-                m.getElement()?.classList.remove('map-fade');
-                m.setStyle({ fillColor: m._typeRef === 'main' ? '#6366f1' : '#10b981', radius: m._typeRef === 'main' ? 9 : 6 });
+        function clearIsolationHoverStates() {
+            mapLayersCache.forEach(layer => {
+                const element = layer.getElement();
+                if (element) {
+                    element.classList.remove('map-fade');
+                    element.classList.remove('map-highlight');
+                }
             });
-            mapLayers.polylines.forEach(p => {
-                const el = p.getElement();
-                if(el) { el.classList.remove('map-fade'); el.classList.remove('map-focus'); }
-            });
-            mapLayers.arrows.forEach(a => a.getElement()?.classList.remove('map-fade'));
         }
 
-        function zoomToFitFullRoute() {
-            if(itineraryTree.length === 0) return;
-            const boundsPoints = [];
-            itineraryTree.forEach(s => {
-                boundsPoints.push([s.lat, s.lng]);
-                s.subLocations.forEach(sub => boundsPoints.push([sub.lat, sub.lng]));
-            });
-            map.fitBounds(L.latLngBounds(boundsPoints), { padding: [40, 40] });
+        function triggerCoordinateSearch(nodeId, event) {
+            if (event) event.stopPropagation();
+            focusCanvasMapOnNode(nodeId, null);
         }
 
-        // I/O Config System Data Pipeline Operations Handling (JSON Import / Export Tools)
-        function exportItineraryArchive() {
-            if(itineraryTree.length === 0) return alert("Nothing to export yet! Map some locations first.");
-            const clusterDataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(itineraryTree, null, 2));
-            const interceptorDlNode = document.createElement('a');
-            interceptorDlNode.setAttribute("href", clusterDataStr);
-            interceptorDlNode.setAttribute("download", `travel_itinerary_archive_${Date.now()}.json`);
-            document.body.appendChild(interceptorDlNode);
-            interceptorDlNode.click();
-            interceptorDlNode.remove();
-        }
+        // JSON Exporter
+        function triggerExportWorkflow() {
+            if (globalLocationsTree.length === 0) {
+                showNotification("Nothing compiled to serialize.", "error");
+                return;
+            }
 
-        function importSavedItinerary(event, initPhase) {
-            const inputSrc = event.target;
-            if(!inputSrc.files || inputSrc.files.length === 0) return;
-            
-            const reader = new FileReader();
-            reader.onload = function() {
-                try {
-                    const parsedStructure = JSON.parse(reader.result);
-                    if(Array.isArray(parsedStructure)) {
-                        if(initPhase) {
-                            initializeWorkspace(parsedStructure);
-                        } else {
-                            itineraryTree = parsedStructure;
-                            refreshParentSelectorDropdown();
-                            renderItineraryFramework();
-                            zoomToFitFullRoute();
-                        }
-                    } else { alert("Malformed configuration formatting encountered inside the uploaded file structural array validation mappings."); }
-                } catch(err) { alert("Failed to parse the itinerary configuration JSON file securely."); }
+            const payload = {
+                targetCountries: document.getElementById('target-countries').value.trim(),
+                tags: globalTags,
+                locations: globalLocationsTree
             };
-            reader.readAsText(inputSrc.files[0]);
+
+            const dataString = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(payload, null, 2));
+            const downloader = document.createElement('a');
+            downloader.setAttribute("href", dataString);
+            downloader.setAttribute("download", `blueprint_itinerary_${Date.now()}.json`);
+            document.body.appendChild(downloader);
+            downloader.click();
+            downloader.remove();
+            showNotification("Successfully compiled and downloaded JSON itinerary.");
+        }
+
+        // Google Maps Specific CSV Format Exporter
+        function triggerCSVExportWorkflow() {
+            if (globalLocationsTree.length === 0) {
+                showNotification("Nothing compiled to serialize into CSV.", "error");
+                return;
+            }
+
+            const countryQuery = document.getElementById('target-countries').value.trim() || "Global";
+            const countryTripTag = `[${countryQuery}] trip`;
+
+            // Flatten recursion structure
+            function flattenTree(nodes, parentPath = "") {
+                let flat = [];
+                nodes.forEach(node => {
+                    const currentPath = parentPath ? `${parentPath} > ${node.name}` : node.name;
+                    flat.push({
+                        node: node,
+                        path: currentPath
+                    });
+                    if (node.children && node.children.length > 0) {
+                        flat = flat.concat(flattenTree(node.children, currentPath));
+                    }
+                });
+                return flat;
+            }
+
+            const flatNodes = flattenTree(globalLocationsTree);
+            
+            // CSV columns mapping standard My Maps format expectations
+            const headers = ["Name", "Latitude", "Longitude", "Description", "Tags", "Hierarchy Path", "Google Maps Layer Group"];
+            const csvRows = [headers.join(",")];
+
+            flatNodes.forEach(item => {
+                const node = item.node;
+                const path = item.path;
+                
+                // Fetch tag names matching active ids
+                const tagNames = node.tagIds.map(id => {
+                    const found = globalTags.find(t => t.id === id);
+                    return found ? found.name : "";
+                }).filter(Boolean).join("; ");
+
+                const description = `Hierarchy: ${path} | Tags: ${tagNames || 'None'}`;
+                const associatedTagsWithTrip = tagNames ? `${tagNames}; ${countryTripTag}` : countryTripTag;
+
+                const cleanCSVField = (val) => {
+                    if (val === undefined || val === null) return '""';
+                    let str = String(val).replace(/"/g, '""');
+                    return `"${str}"`;
+                };
+
+                const row = [
+                    cleanCSVField(node.name),
+                    cleanCSVField(node.lat),
+                    cleanCSVField(node.lng),
+                    cleanCSVField(description),
+                    cleanCSVField(associatedTagsWithTrip),
+                    cleanCSVField(path),
+                    cleanCSVField(countryTripTag)
+                ];
+
+                csvRows.push(row.join(","));
+            });
+
+            // Trigger structural browser trigger pipeline
+            const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + encodeURIComponent(csvRows.join("\r\n"));
+            const downloader = document.createElement('a');
+            downloader.setAttribute("href", csvContent);
+            downloader.setAttribute("download", `gmaps_trip_${countryQuery.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.csv`);
+            document.body.appendChild(downloader);
+            downloader.click();
+            downloader.remove();
+            showNotification(`CSV file configured to import perfectly into Google Maps.`);
+        }
+
+        function triggerImportSelector() {
+            document.getElementById('blueprint-file-input').click();
+        }
+
+        function loadBlueprintHandler(event) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const packet = JSON.parse(e.target.result);
+                    if (packet && packet.locations && packet.tags) {
+                        globalLocationsTree = packet.locations;
+                        globalTags = packet.tags;
+                        
+                        document.getElementById('target-countries').value = packet.targetCountries || "";
+                        document.getElementById('active-countries').innerText = `Active Scope: ${packet.targetCountries || "Loaded Map"}`;
+                        document.getElementById('setup-screen').classList.add('hidden');
+
+                        // Reset focus anchor safely
+                        currentlySelectedParentId = "ROOT";
+
+                        synchronizeTagLibraries();
+                        synchronizeDropdownSelectors();
+                        renderDynamicInterface();
+
+                        // Shift camera to focus on first available root element node
+                        if (globalLocationsTree.length > 0) {
+                            map.setView([globalLocationsTree[0].lat, globalLocationsTree[0].lng], 7);
+                        }
+                        showNotification("Blueprint blueprint package parsed successfully.");
+                    } else {
+                        showNotification("Invalid JSON travel planner template parsing configuration file.", "error");
+                    }
+                } catch (err) {
+                    showNotification("Failure executing JSON compilation schema file extraction process.", "error");
+                }
+            };
+            reader.readAsText(event.target.files[0]);
+        }
+
+        function findNodeInTree(nodes, targetId) {
+            for (let node of nodes) {
+                if (node.id === targetId) return node;
+                if (node.children && node.children.length > 0) {
+                    const found = findNodeInTree(node.children, targetId);
+                    if (found) return found;
+                }
+            }
+            return null;
+        }
+
+        function deleteNodeFromTree(nodes, targetId) {
+            return nodes.filter(node => {
+                if (node.id === targetId) return false;
+                if (node.children && node.children.length > 0) {
+                    node.children = deleteNodeFromTree(node.children, targetId);
+                }
+                return true;
+            });
+        }
+
+        function traverseTreeAndPerform(nodes, actionCallback) {
+            nodes.forEach(node => {
+                actionCallback(node);
+                if (node.children && node.children.length > 0) {
+                    traverseTreeAndPerform(node.children, actionCallback);
+                }
+            });
         }
     </script>
 </body>
